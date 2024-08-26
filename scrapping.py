@@ -2,6 +2,7 @@ import requests
 import numpy as np
 import csv
 
+from model.store import Store
 from config import kakao
 
 def csv_to_dict(file_path):
@@ -38,43 +39,42 @@ class Scrapping:
         return address
 
 
-    # 가게 정보가 list로 전달되는 documents 파싱하여 dict list 반환하기
+    # 가게 정보가 list로 전달되는 documents 파싱하여 개별 store 정보로 변경하기
     def getStoreList(self, documents):
-        infos = list()
         for store in documents:
-            address = self.getAddress(store['x'], store['y'])
+            info = Store()
             
+            # x, y 좌표로 행정동 코드 가져오기
+            codes = self.getAddress(store['x'], store['y'])
+            
+            # 카테고리 결정하기 
             if(store['category_group_code'] == 'CE7'):
-                category = '카페'
+                info.category_string = '카페'
             else:
+                # category 파싱하기 (AA > BB > CC 로 전달되는 것을 CC만 저장)
+                
                 categories = store['category_name'].split(' > ')
                 category = categories[len(categories) - 1]
+                
+                info.category_string = category
+                
+                # 일부 "CC"로 표기된 것이 있어 해당 값 벗겨냄 
                 if category.startswith('"'):
-                    category = category[1:-1]
+                    info.category_string = category[1:-1]
             
-            info = [
-                store['place_name'],
-                ## category 파싱하기 (AA > BB > CC 로 전달되는 것을 CC만 저장)
-                category,
-                store['x'],
-                store['y'],
-                store['road_address_name'],
-                store['address_name'],
-                store['phone'],
-                address['state'],
-                address['city'],
-                address['town']
-            ]
+            # data 저장
+            info.store_name = store['place_name']
+            info.latitude = store['y']
+            info.longitude = store['x']
+            info.set_address(store['address_name'], store['road_address_name'], codes)
+            info.contact = store['phone']
             
-            infos.append(info)
-        
-        return infos
-
+            # TODO: 해당 식당 정보가 이미 DB에 존재한다면 update, 존재하지 않는다면 create
+            # TODO: 식당 정보는 식당 이름, x, y 값으로 검색함
 
     # 데이터 검색하기
     def requestSearch(self, start_x, start_y, end_x, end_y, width, height, category):
         URL = kakao['category_url']
-        result = list()
         
         for x in np.arange(start_x, end_x, width):
             for y in np.arange(start_y, end_y, -height):
@@ -83,7 +83,7 @@ class Scrapping:
                     'rect' : f'{x},{y},{x + width},{y - height}'
                     }
                 
-                response = requests.get(URL, params=params, headers=headers)
+                response = requests.get(URL, params=params, headers=self.headers)
                 data = response.json()
                 
                 meta = data['meta']
@@ -93,17 +93,18 @@ class Scrapping:
             
                 if(meta['total_count'] > meta['pageable_count']):
                     # readable한 수가 전체 수 보다 크면 공간을 4분할하여 정보를 얻어옴
-                    result.extend(self.requestSearch(x, y, x + width/2, y - height/2, width/2, height/2, category))
-                    result.extend(self.requestSearch(x + width/2, y, x + width, y - height/2, width/2, height/2, category))
-                    result.extend(self.requestSearch(x, y - height/2, x + width/2, y - height, width/2, height/2, category))
-                    result.extend(self.requestSearch(x + width/2, y - height/2, x + width, y - height, width/2, height/2, category))
+                    self.requestSearch(x, y, x + width/2, y - height/2, width/2, height/2, category)
+                    self.requestSearch(x + width/2, y, x + width, y - height/2, width/2, height/2, category)
+                    self.requestSearch(x, y - height/2, x + width/2, y - height, width/2, height/2, category)
+                    self.requestSearch(x + width/2, y - height/2, x + width, y - height, width/2, height/2, category)
                     
                 else:
                     # page 1의 정보를 parsing
-                    result.extend(self.getStoreList(data['documents']))
+                    self.getStoreList(data['documents']) # document 내 store List 접근
                     
                     if(meta['is_end'] == True):
                         continue
+                    
                     # 이후 page 정보를 parsing
                     page = 2
                     while(True):
@@ -113,10 +114,10 @@ class Scrapping:
                             'page' : page
                             }
                         page_response = requests.get(URL, params=page_params, headers=self.headers).json()
-                        result.extend(self.getStoreList(page_response['documents']))
+                        
+                        self.getStoreList(page_response['documents'])
                         
                         if(page_response['meta']['is_end'] == True):
                             break
                         
                         page += 1
-        return result

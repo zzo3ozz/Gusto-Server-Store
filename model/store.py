@@ -1,19 +1,15 @@
 class Store:
     def __init__(self):
-        self.store_id
-        self.store_name
-        self.category_string
-        self.longitude
-        self.latitude
-        self.address
-        self.old_address
-        self.contact
-        self.state_id
-        self.town_id
-        self.city_id
-        self.status
-        self.created_at
-        self.updated_at
+        self.store_name = None
+        self.category_string = None
+        self.longitude = None
+        self.latitude = None
+        self.address = None
+        self.old_address = None
+        self.contact = None
+        self.state_id = None
+        self.town_id = None
+        self.city_id = None
     
     def set_address(self, address, old_address, codes):
         self.address = address

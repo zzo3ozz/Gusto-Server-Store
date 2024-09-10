@@ -1,6 +1,14 @@
-import scrapping
+from scrapping import Scrapping
+from db import Database
+from resources.conf import ssh, db
+
+from sshtunnel import SSHTunnelForwarder
+from sqlalchemy import create_engine
+
 
 if __name__ == '__main__':
+    db_instance = Database()
+    
     # 시작 지점에 맞게 변경 
     start_x = 126.8777806 # longitude
     start_y = 37.5231736 # latitude
@@ -13,11 +21,16 @@ if __name__ == '__main__':
     width = 0.00175#0.0015
     height = 0.00175#0.0015
 
-    # 음식점 검색
-    scrapping.requestSearch(start_x, start_y, end_x, end_y, width, height, 'FD6')
+    scrapping = Scrapping()
+    
+    try:
+        # 음식점 검색
+        scrapping.requestSearch(db_instance, start_x, start_y, end_x, end_y, width, height, 'FD6')
 
-    # 카페 검색 
-    scrapping.requestSearch(start_x, start_y, end_x, end_y, width, height, 'CE7')
+        # 카페 검색 
+        scrapping.requestSearch(db_instance, start_x, start_y, end_x, end_y, width, height, 'CE7')
+    finally:
+        db_instance.close()
 
         
         

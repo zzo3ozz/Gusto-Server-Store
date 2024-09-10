@@ -3,20 +3,20 @@ import numpy as np
 import csv
 
 from model.store import Store
-from config import kakao
+from resources.conf import kakao
 
 def csv_to_dict(file_path):
         with open(file_path, mode='r', encoding='utf-8') as file:
             reader = csv.reader(file)
-            result = [{row[1]: row[0]} for row in reader]
+            result = {row[1]: row[0] for row in reader}
         return result
     
 class Scrapping:
     def __init__(self):
         self.headers = {'Authorization' : f'KakaoAK {kakao["access_key"]}'}
-        self.state = csv_to_dict('resources/state_list.csv')
-        self.city = csv_to_dict('resources/city_list.csv')
-        self.town = csv_to_dict('resources/town_list.csv')
+        self.state = csv_to_dict('Gusto-Server-Store/resources/state_list.csv')
+        self.city = csv_to_dict('Gusto-Server-Store/resources/city_list.csv')
+        self.town = csv_to_dict('Gusto-Server-Store/resources/town_list.csv')
         
     # 위도 및 경도가 주어졌을 때 행정동 정보 가져와 code로 변경하기
     def getAddress(self, longitude, latitude):
@@ -40,7 +40,7 @@ class Scrapping:
 
 
     # 가게 정보가 list로 전달되는 documents 파싱하여 개별 store 정보로 변경하기
-    def getStoreList(self, documents):
+    def getStoreList(self, db_instance, documents):
         for store in documents:
             info = Store()
             
@@ -69,11 +69,11 @@ class Scrapping:
             info.set_address(store['address_name'], store['road_address_name'], codes)
             info.contact = store['phone']
             
-            # TODO: 해당 식당 정보가 이미 DB에 존재한다면 update, 존재하지 않는다면 create
-            # TODO: 식당 정보는 식당 이름, x, y 값으로 검색함
+            # 해당 식당 정보가 이미 DB에 존재한다면 update, 존재하지 않는다면 create
+            db_instance.update_store(info)
 
     # 데이터 검색하기
-    def requestSearch(self, start_x, start_y, end_x, end_y, width, height, category):
+    def requestSearch(self, db_instance, start_x, start_y, end_x, end_y, width, height, category):
         URL = kakao['category_url']
         
         for x in np.arange(start_x, end_x, width):
@@ -93,14 +93,14 @@ class Scrapping:
             
                 if(meta['total_count'] > meta['pageable_count']):
                     # readable한 수가 전체 수 보다 크면 공간을 4분할하여 정보를 얻어옴
-                    self.requestSearch(x, y, x + width/2, y - height/2, width/2, height/2, category)
-                    self.requestSearch(x + width/2, y, x + width, y - height/2, width/2, height/2, category)
-                    self.requestSearch(x, y - height/2, x + width/2, y - height, width/2, height/2, category)
-                    self.requestSearch(x + width/2, y - height/2, x + width, y - height, width/2, height/2, category)
+                    self.requestSearch(db_instance, x, y, x + width/2, y - height/2, width/2, height/2, category)
+                    self.requestSearch(db_instance, x + width/2, y, x + width, y - height/2, width/2, height/2, category)
+                    self.requestSearch(db_instance, x, y - height/2, x + width/2, y - height, width/2, height/2, category)
+                    self.requestSearch(db_instance, x + width/2, y - height/2, x + width, y - height, width/2, height/2, category)
                     
                 else:
                     # page 1의 정보를 parsing
-                    self.getStoreList(data['documents']) # document 내 store List 접근
+                    self.getStoreList(db_instance, data['documents']) # document 내 store List 접근
                     
                     if(meta['is_end'] == True):
                         continue
@@ -115,7 +115,7 @@ class Scrapping:
                             }
                         page_response = requests.get(URL, params=page_params, headers=self.headers).json()
                         
-                        self.getStoreList(page_response['documents'])
+                        self.getStoreList(db_instance, page_response['documents'])
                         
                         if(page_response['meta']['is_end'] == True):
                             break

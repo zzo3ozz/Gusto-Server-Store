@@ -3,41 +3,40 @@ import numpy as np
 import csv
 
 from model.store import Store
-from resources.conf import kakao
+from resources.conf import kakao, sgis
 
-def csv_to_dict(file_path):
-        with open(file_path, mode='r', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            result = {row[1]: row[0] for row in reader}
-        return result
+
+def getAccesskey():
+    URL = sgis['key_url']
+    data = requests.get(URL).json()
+    return data['result']['accessToken']
+
+# 위도 및 경도가 주어졌을 때 행정동 정보 가져와 code로 변경하기
+def getAddress(longitude, latitude):
+    URL = sgis['add_url']
     
+    params = {
+        'accessToken' : getAccesskey(),
+        'addr_type' : 21,
+        'x_coor' : f'{longitude}',
+        'y_coor' : f'{latitude}'
+    }
+    
+    data = requests.get(URL, params=params).json()
+    h_data = data['result'][0]
+    
+    
+    address = {
+        'state' : h_data['sido_cd'],
+        'city' : h_data['sido_cd'] + h_data['sgg_cd'],
+        'town' : h_data['adm_dr_cd']
+    }
+    
+    return address
+
 class Scrapping:
     def __init__(self):
         self.headers = {'Authorization' : f'KakaoAK {kakao["access_key"]}'}
-        self.state = csv_to_dict('Gusto-Server-Store/resources/state_list.csv')
-        self.city = csv_to_dict('Gusto-Server-Store/resources/city_list.csv')
-        self.town = csv_to_dict('Gusto-Server-Store/resources/town_list.csv')
-        
-    # 위도 및 경도가 주어졌을 때 행정동 정보 가져와 code로 변경하기
-    def getAddress(self, longitude, latitude):
-        URL = kakao['address_url']
-        params = {
-            'x' : f'{longitude}',
-            'y' : f'{latitude}'
-        }
-        
-        data = requests.get(URL, params=params, headers=self.headers).json()
-        h_data = data['documents'][1]
-        
-        
-        address = {
-            'state' : self.state.get(h_data['region_1depth_name']),
-            'city' : self.city.get(h_data['region_2depth_name'].split()[0]),
-            'town' : self.town.get(h_data['region_3depth_name'])
-        }
-        
-        return address
-
 
     # 가게 정보가 list로 전달되는 documents 파싱하여 개별 store 정보로 변경하기
     def getStoreList(self, db_instance, documents):
